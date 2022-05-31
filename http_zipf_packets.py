@@ -13,6 +13,11 @@ headers = {
 
 # zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
 
+def read_uri_list(filename):
+    with open(filename, 'r') as f:
+        uri_list = f.read().splitlines()
+    return uri_list
+
 
 def generate_zipf_dist(num_flows, total_packets, power):
     summation = 0
@@ -74,11 +79,11 @@ def send_request(url_list: list):
 if __name__ == "__main__":
     argv = sys.argv[1:]
     try:
-        opts, args = getopt.getopt(argv, "i:f:p:e:")
-        if len(opts) != 4:
-            print(
-                "Usage: -i <ip/domain> -f <number of flows> -p <number of packets> -e <exponent greater than 1>")
+        opts, args = getopt.getopt(argv, "i:f:p:e:u:")
+        if len(opts) not in (4, 5):
+            print("Usage: -i <ip/domain> -f <number of flows> -p <number of packets> -e <exponent greater than 1> -u <uri_list_path>")
             sys.exit(1)
+        u = ""
         for opt, arg in opts:
             if opt == '-i':
                 i = arg
@@ -88,9 +93,13 @@ if __name__ == "__main__":
                 p = int(arg)
             if opt == '-e':
                 e = float(arg)
+            if opt == '-u':
+                u = arg
 
-        # uri_list = ["/{}.txt".format(i) for i in range(1, f + 1)]  # generate uri list
         uri_list = ["/s?wd={}".format(i) for i in range(1, 100)]  # generate uri list
+        if u != "":
+            uri_list = read_uri_list(u)
+        print("[main] uri list: {}".format(uri_list))
         url_list = generate_zipf_requests(i, f, p, e)
         max_thread_num = multiprocessing.cpu_count()
         succ_msg_num = 0
@@ -110,4 +119,4 @@ if __name__ == "__main__":
         print("[Main]: Total number of success requests = {}".format(succ_msg_num))
 
     except getopt.GetoptError:
-        print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent greater than 1.0>")
+        print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent greater than 1.0> -u <uri_list_path>")
