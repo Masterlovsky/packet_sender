@@ -1,3 +1,4 @@
+from time import sleep
 import numpy as np
 import getopt
 import sys
@@ -49,6 +50,7 @@ def send_request(url_list: list):
             print("[{}] Get: {}".format(threading.current_thread().name, url))
             r = requests.get(url, headers=headers, timeout=1)
             # print("Status code: ", r.status_code)
+            sleep(0.1)
         except requests.exceptions.RequestException as e:
             print(e)
 
