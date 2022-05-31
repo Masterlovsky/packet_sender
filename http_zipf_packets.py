@@ -88,8 +88,7 @@ if __name__ == "__main__":
                 p = int(arg)
             if opt == '-e':
                 e = float(arg)
-        print("Main: Number of flows = %d Number of packets = %d Zipf exponent = %f" % (
-            f, p, e))
+
         # uri_list = ["/{}.txt".format(i) for i in range(1, f + 1)]  # generate uri list
         uri_list = ["/s?wd={}".format(i) for i in range(1, 100)]  # generate uri list
         url_list = generate_zipf_requests(i, f, p, e)
@@ -107,7 +106,8 @@ if __name__ == "__main__":
                 t.start()
         for t in thread_list:
             t.join()
-        print("[main] Total number of success requests = {}".format(succ_msg_num))
+        print("[Main]: Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
+        print("[Main]: Total number of success requests = {}".format(succ_msg_num))
 
     except getopt.GetoptError:
         print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent greater than 1.0>")
