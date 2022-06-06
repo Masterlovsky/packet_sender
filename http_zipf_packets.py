@@ -1,5 +1,7 @@
 #! /usr/bin/python3
 from time import sleep
+from pyecharts import options
+from pyecharts.charts import Bar
 import numpy as np
 import getopt
 import sys
@@ -11,7 +13,9 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
 }
 
+SLEEPTIME = 0.1  # sleep () seconds between requests
 # zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
+
 
 def read_uri_list(filename):
     with open(filename, 'r') as f:
@@ -19,7 +23,7 @@ def read_uri_list(filename):
     return uri_list
 
 
-def generate_zipf_dist(num_flows, total_packets, power):
+def generate_zipf_dist(num_flows, total_packets, power) -> list:
     summation = 0
     res = 0
     zipf_dist = []
@@ -31,9 +35,9 @@ def generate_zipf_dist(num_flows, total_packets, power):
     for i in range(1, num_flows + 1):
         res = init_num_packets * (1.0/i**power)
         zipf_dist.append(int(res))
-    
+
     if sum(zipf_dist) != total_packets:
-        zipf_dist[0]+=total_packets-sum(zipf_dist)
+        zipf_dist[0] += total_packets-sum(zipf_dist)
 
     print("[generate zipf flows] # request number in the first uri = {}".format(
         zipf_dist[0]))
@@ -60,6 +64,26 @@ def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
     np.random.shuffle(url_l)
     return url_l
 
+
+def draw_bar(url_req_list: list):
+    print("[draw bar] render html file...")
+    url_l = list(set(url_req_list))
+    url_l.sort(key=lambda x: url_req_list.count(x), reverse=True)
+    c = (
+        Bar(init_opts=options.InitOpts(width='1200px', height='720px'))
+        .add_xaxis(url_l)
+        .add_yaxis("RequestNumber", [url_req_list.count(url) for url in url_l])
+        .set_global_opts(title_opts=options.TitleOpts(title="Request Number"),
+                         xaxis_opts=options.AxisOpts(name="URL",
+                             axislabel_opts=options.LabelOpts(rotate=-30)),
+                         yaxis_opts=options.AxisOpts(name="number"),
+                         datazoom_opts=options.DataZoomOpts(range_start=0, range_end=100, type_="inside"),
+                         )
+    )
+    c.render("result.html")
+    return c
+
+
 def send_request(url_list: list):
     global succ_msg_num
     for url in url_list:
@@ -71,7 +95,7 @@ def send_request(url_list: list):
                 succ_msg_num += 1
             lock.release()
             # print("Status code: ", r.status_code)
-            sleep(0.1)
+            sleep(SLEEPTIME)
         except requests.exceptions.RequestException as e:
             print(e)
 
@@ -95,28 +119,28 @@ if __name__ == "__main__":
                 e = float(arg)
             if opt == '-u':
                 u = arg
-
-        uri_list = ["/s?wd={}".format(i) for i in range(1, 100)]  # generate uri list
-        if u != "":
-            uri_list = read_uri_list(u)
-        print("[main] uri list: {}".format(uri_list))
-        url_list = generate_zipf_requests(i, f, p, e)
-        max_thread_num = multiprocessing.cpu_count()
-        succ_msg_num = 0
-        lock = threading.Lock()
-        thread_list = []
-        if len(url_list) < max_thread_num:
-            send_request(url_list)
-        else:
-            for i in range(max_thread_num):
-                t = threading.Thread(target=send_request, args=(
-                    url_list[i::max_thread_num],))
-                thread_list.append(t)
-                t.start()
-        for t in thread_list:
-            t.join()
-        print("[Main]: Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
-        print("[Main]: Total number of success requests = {}".format(succ_msg_num))
-
     except getopt.GetoptError:
         print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent greater than 1.0> -u <uri_list_path>")
+    uri_list = ["/s?wd={}".format(i)
+                for i in range(1, 100)]  # generate uri list
+    if u != "":
+        uri_list = read_uri_list(u)
+    print("[main] uri list: {}".format(uri_list))
+    url_list = generate_zipf_requests(i, f, p, e)
+    max_thread_num = multiprocessing.cpu_count()
+    succ_msg_num = 0
+    lock = threading.Lock()
+    thread_list = []
+    if len(url_list) < max_thread_num:
+        send_request(url_list)
+    else:
+        for i in range(max_thread_num):
+            t = threading.Thread(target=send_request, args=(
+                url_list[i::max_thread_num],))
+            thread_list.append(t)
+            t.start()
+    for t in thread_list:
+        t.join()
+    draw_bar(url_list)  # draw bar chart of uri request number
+    print("[Main]: Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
+    print("[Main]: Total number of success requests = {}".format(succ_msg_num))
