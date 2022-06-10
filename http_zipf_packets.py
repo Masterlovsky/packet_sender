@@ -1,4 +1,11 @@
 #! /usr/bin/python3
+""" 
+Powered by Masterlovsky@gmail.com Version1.0
+This is a simple example of using zipf-like distribution to generate http get requests.
+The distribution is based on the number of flows and the total number of packets.
+# zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
+
+"""
 from time import sleep
 from pyecharts import options
 from pyecharts.charts import Bar
@@ -16,7 +23,6 @@ headers = {
 # ADDPORT = "" # defult request use :80/443
 ADDPORT = ":8080"
 SLEEPTIME = 0.1  # sleep () seconds between requests
-# zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
 
 
 def read_uri_list(filename):
@@ -110,7 +116,7 @@ if __name__ == "__main__":
     try:
         opts, args = getopt.getopt(argv, "i:f:p:e:u:")
         if len(opts) not in (4, 5):
-            print("Usage: -i <ip/domain> -f <number of flows> -p <number of packets> -e <exponent greater than 1> -u <uri_list_path>")
+            print("Usage: -i <ip/domain> -f <number of flows> -p <number of packets> -e <exponent> -u <uri_list_path>")
             sys.exit(1)
         u = ""
         for opt, arg in opts:
@@ -125,9 +131,9 @@ if __name__ == "__main__":
             if opt == '-u':
                 u = arg
     except getopt.GetoptError:
-        print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent greater than 1.0> -u <uri_list_path>")
+        print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent> -u <uri_list_path>")
 
-    start_index = 1 # todo: [set to need value]
+    start_index = 1  # todo: [set to need value]
     uri_list = ["/gen1/{}.txt".format(i)
                 for i in range(start_index, start_index + f + 1)]  # generate uri list
     if u != "":
