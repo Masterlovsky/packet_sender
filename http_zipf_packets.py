@@ -6,15 +6,18 @@ The distribution is based on the number of flows and the total number of packets
 # zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
 
 """
-from time import sleep
+import time
+import getopt
+import sys
+import os
+import json
+import requests
+import threading
+import logging
+import multiprocessing
 from pyecharts import options
 from pyecharts.charts import Bar
 import numpy as np
-import getopt
-import sys
-import requests
-import threading
-import multiprocessing
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
@@ -22,8 +25,25 @@ headers = {
 
 # ADDPORT = "" # defult request use :80/443
 ADDPORT = ":8080"
-SLEEPTIME = 0.1  # sleep () seconds between requests
+SEND_REQ_INTERVAL = 0.1  # sleep () seconds between requests
+CAL_PERIOD = 1  # father recall proportion calcultion Period (s)
+# RANDOM_SEED = 1
+RANDOM_SEED = None
 
+def log_init(log_level = "INFO") -> logging.Logger:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level = "DEBUG")
+    console = logging.StreamHandler()
+    console.setLevel(log_level)
+    logger.addHandler(console)
+    handler = logging.FileHandler("log.txt")
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('[%(asctime)s]-[%(threadName)s]-[%(levelname)s]: %(message)s')
+    handler.setFormatter(formatter)
+    console.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+    
 
 def read_uri_list(filename):
     with open(filename, 'r') as f:
@@ -47,7 +67,7 @@ def generate_zipf_dist(num_flows, total_packets, power) -> list:
     if sum(zipf_dist) != total_packets:
         zipf_dist[0] += total_packets-sum(zipf_dist)
 
-    print("[generate zipf flows] # request number in the first uri = {}".format(
+    logger.info("[generate zipf flows] # request number in the first uri = {}".format(
         zipf_dist[0]))
 
     return zipf_dist
@@ -69,21 +89,22 @@ def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
         for j in range(zipf_dist[i]):
             url_l.append(url)
 
+    np.random.seed(RANDOM_SEED)
     np.random.shuffle(url_l)
     return url_l[0:total_packets]
 
 
 def draw_bar(url_req_list: list):
-    print("[draw bar] render html file...")
+    logger.info("[draw bar] render html file...")
     url_l = list(set(url_req_list))
     url_l.sort(key=lambda x: url_req_list.count(x), reverse=True)
     c = (
-        Bar(init_opts=options.InitOpts(width='1200px', height='720px'))
+        Bar(init_opts=options.InitOpts(width='1280px', height='720px'))
         .add_xaxis(url_l)
         .add_yaxis("RequestNumber", [url_req_list.count(url) for url in url_l])
         .set_global_opts(title_opts=options.TitleOpts(title="Request Number-URL FIGURE"),
                          xaxis_opts=options.AxisOpts(name="URL",
-                                                     axislabel_opts=options.LabelOpts(rotate=-30)),
+                                                     axislabel_opts=options.LabelOpts(rotate=30)),
                          yaxis_opts=options.AxisOpts(name="REQ Number"),
                          datazoom_opts=options.DataZoomOpts(
                              range_start=0, range_end=100, type_="inside"),
@@ -95,20 +116,60 @@ def draw_bar(url_req_list: list):
 
 def send_request(url_list: list):
     global succ_msg_num
+    global send_msg_num
     for url in url_list:
         try:
-            print("[{}] Get: {}".format(threading.current_thread().name, url))
+            logger.debug("[{}] Get: {}".format(threading.current_thread().name, url))
             r = requests.get(url, headers=headers, timeout=1)
             lock.acquire()
+            send_msg_num += 1
             if r.status_code == 200:
                 succ_msg_num += 1
             else:
-                print(r)
+                logger.debug(r)
             lock.release()
-            # print("Status code: ", r.status_code)
-            sleep(SLEEPTIME)
+            time.sleep(SEND_REQ_INTERVAL)
         except requests.exceptions.RequestException as e:
-            print(e)
+            logger.debug(e)
+
+
+def cal_proportion():
+    BYTES_PER_REQ = 16640  # todo: change to right value
+    global send_msg_num
+    father_out_byte = get_father_output_byte("2400:dd01:1037:8090::5", 8080)
+    # father_out_byte = BYTES_PER_REQ * 0.321 # test
+    logger.info("recall_prop = {:.2%}".format(father_out_byte / (send_msg_num * BYTES_PER_REQ)))
+
+
+def loop_thread_cal_proportion():
+    while True:
+        time.sleep(CAL_PERIOD)
+        cal_proportion()
+
+
+def get_father_output_byte(father_ip: str, father_port: int) -> int:
+    if ":" not in father_ip:
+        logger.warn("father ip is not ipv6 address!")
+        return 0
+    fatherIP = "[" + father_ip + "]" + ":" + str(father_port)
+    cmd = 'curl -g -s "http://[' + father_ip + \
+        ']/stats/control?cmd=status&group=upstream@group&zone=*&group=n=nodes@group&zone=*"'
+    log = {'fatherIP': fatherIP, 'fatherInbytes': 0,
+           'fatherOutBytes': 0, 'localInBytes': 0, 'localOutBytes': 0}
+    ss = os.popen(cmd).readlines()
+    result = json.loads(ss[0])
+    if 'upstreamZones' in result.keys():
+        server = (result['upstreamZones'])['::nogroups']
+        server_num = len(server)
+        for i in range(server_num):
+            j = server[i]
+            if j['server'] == fatherIP:
+                log['fatherInbytes'] = j['inBytes']
+                log['fatherOutBytes'] = j['outBytes']
+            else:
+                log['localInBytes'] += j['inBytes']
+                log['localOutBytes'] += j['outBytes']
+    return int(log["fatherOutBytes"])
 
 
 if __name__ == "__main__":
@@ -132,17 +193,22 @@ if __name__ == "__main__":
                 u = arg
     except getopt.GetoptError:
         print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent> -u <uri_list_path>")
-
+    logger = log_init()
+    max_thread_num = multiprocessing.cpu_count()
+    send_msg_num = 0
+    succ_msg_num = 0
     start_index = 1  # todo: [set to need value]
     uri_list = ["/gen1/{}.txt".format(i)
                 for i in range(start_index, start_index + f + 1)]  # generate uri list
     if u != "":
         uri_list = read_uri_list(u)
-    print("[Main] uri list len: {}, first 10 uri in uri_list: {}".format(
+    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(
         len(uri_list), uri_list[0:10]))
     url_list = generate_zipf_requests(i, f, p, e)
-    max_thread_num = multiprocessing.cpu_count()
-    succ_msg_num = 0
+    deamon_thread = threading.Thread(
+        name="DeamonThread", target=loop_thread_cal_proportion)
+    deamon_thread.setDaemon(True)
+    deamon_thread.start()
     lock = threading.Lock()
     thread_list = []
     if len(url_list) < max_thread_num:
@@ -156,7 +222,7 @@ if __name__ == "__main__":
     for t in thread_list:
         t.join()
     draw_bar(url_list)  # draw bar chart of uri request number
-    print("[Main]: Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
-    print("[Main]: real flow number: {}".format(len(set(url_list))))
-    print("[Main]: URL_REQ: {}".format(set(url_list)))
-    print("[Main]: Total number of success requests = {}".format(succ_msg_num))
+    logger.debug("URL_REQ: {}".format(set(url_list)))
+    logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
+    logger.info("real flow number: {}".format(len(set(url_list))))
+    logger.info("Total number of success requests = {}".format(succ_msg_num))
