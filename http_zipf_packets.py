@@ -13,6 +13,8 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
 }
 
+# ADDPORT = "" # defult request use :80/443
+ADDPORT = ":8080"
 SLEEPTIME = 0.1  # sleep () seconds between requests
 # zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
 
@@ -47,11 +49,11 @@ def generate_zipf_dist(num_flows, total_packets, power) -> list:
 
 def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
     # * get zipf dist
-    zipf_dist = generate_zipf_dist(num_flows, total_packets, power)
+    zipf_dist = generate_zipf_dist(num_flows, total_packets * 10, power)
 
     # * check dstip is ipv6 address
     if ':' in dstip:
-        dstip = '[' + dstip + ']'
+        dstip = '[' + dstip + ']' + ADDPORT
 
     # * get url list
     url_l = []
@@ -62,7 +64,7 @@ def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
             url_l.append(url)
 
     np.random.shuffle(url_l)
-    return url_l
+    return url_l[0:total_packets]
 
 
 def draw_bar(url_req_list: list):
@@ -73,11 +75,12 @@ def draw_bar(url_req_list: list):
         Bar(init_opts=options.InitOpts(width='1200px', height='720px'))
         .add_xaxis(url_l)
         .add_yaxis("RequestNumber", [url_req_list.count(url) for url in url_l])
-        .set_global_opts(title_opts=options.TitleOpts(title="Request Number"),
+        .set_global_opts(title_opts=options.TitleOpts(title="Request Number-URL FIGURE"),
                          xaxis_opts=options.AxisOpts(name="URL",
-                             axislabel_opts=options.LabelOpts(rotate=-30)),
-                         yaxis_opts=options.AxisOpts(name="number"),
-                         datazoom_opts=options.DataZoomOpts(range_start=0, range_end=100, type_="inside"),
+                                                     axislabel_opts=options.LabelOpts(rotate=-30)),
+                         yaxis_opts=options.AxisOpts(name="REQ Number"),
+                         datazoom_opts=options.DataZoomOpts(
+                             range_start=0, range_end=100, type_="inside"),
                          )
     )
     c.render("result.html")
@@ -93,6 +96,8 @@ def send_request(url_list: list):
             lock.acquire()
             if r.status_code == 200:
                 succ_msg_num += 1
+            else:
+                print(r)
             lock.release()
             # print("Status code: ", r.status_code)
             sleep(SLEEPTIME)
@@ -121,11 +126,14 @@ if __name__ == "__main__":
                 u = arg
     except getopt.GetoptError:
         print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent greater than 1.0> -u <uri_list_path>")
-    uri_list = ["/s?wd={}".format(i)
-                for i in range(1, 100)]  # generate uri list
+
+    start_index = 1 # todo: [set to need value]
+    uri_list = ["/gen1/{}.txt".format(i)
+                for i in range(start_index, start_index + f + 1)]  # generate uri list
     if u != "":
         uri_list = read_uri_list(u)
-    print("[main] uri list: {}".format(uri_list))
+    print("[Main] uri list len: {}, first 10 uri in uri_list: {}".format(
+        len(uri_list), uri_list[0:10]))
     url_list = generate_zipf_requests(i, f, p, e)
     max_thread_num = multiprocessing.cpu_count()
     succ_msg_num = 0
@@ -143,4 +151,6 @@ if __name__ == "__main__":
         t.join()
     draw_bar(url_list)  # draw bar chart of uri request number
     print("[Main]: Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
+    print("[Main]: real flow number: {}".format(len(set(url_list))))
+    print("[Main]: URL_REQ: {}".format(set(url_list)))
     print("[Main]: Total number of success requests = {}".format(succ_msg_num))
