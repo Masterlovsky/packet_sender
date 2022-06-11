@@ -30,20 +30,22 @@ CAL_PERIOD = 1  # father recall proportion calcultion Period (s)
 # RANDOM_SEED = 1
 RANDOM_SEED = None
 
-def log_init(log_level = "INFO") -> logging.Logger:
+
+def log_init(log_level="INFO") -> logging.Logger:
     logger = logging.getLogger(__name__)
-    logger.setLevel(level = "DEBUG")
+    logger.setLevel(level="DEBUG")
     console = logging.StreamHandler()
     console.setLevel(log_level)
     logger.addHandler(console)
     handler = logging.FileHandler("log.txt")
     handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('[%(asctime)s]-[%(threadName)s]-[%(levelname)s]: %(message)s')
+    formatter = logging.Formatter(
+        '[%(asctime)s]-[%(threadName)s]-[%(levelname)s]: %(message)s')
     handler.setFormatter(formatter)
     console.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
-    
+
 
 def read_uri_list(filename):
     with open(filename, 'r') as f:
@@ -51,7 +53,7 @@ def read_uri_list(filename):
     return uri_list
 
 
-def generate_zipf_dist(num_flows, total_packets, power) -> list:
+def _generate_zipf_dist(num_flows, total_packets, power) -> list:
     summation = 0
     res = 0
     zipf_dist = []
@@ -75,7 +77,7 @@ def generate_zipf_dist(num_flows, total_packets, power) -> list:
 
 def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
     # * get zipf dist
-    zipf_dist = generate_zipf_dist(num_flows, total_packets * 10, power)
+    zipf_dist = _generate_zipf_dist(num_flows, total_packets * 10, power)
 
     # * check dstip is ipv6 address
     if ':' in dstip:
@@ -85,6 +87,8 @@ def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
     url_l = []
 
     for i in range(num_flows):
+        if i >= len(uri_list):
+            break
         url = "http://{}{}".format(dstip, uri_list[i])
         for j in range(zipf_dist[i]):
             url_l.append(url)
@@ -93,6 +97,19 @@ def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
     np.random.shuffle(url_l)
     return url_l[0:total_packets]
 
+
+def generate_union_requests(dstip, num_flows, total_packets) -> list:
+    # * check dstip is ipv6 address
+    if ':' in dstip:
+        dstip = '[' + dstip + ']' + ADDPORT
+
+    # * get url list
+    url_l = []
+    for i in range(num_flows):
+        if i < len(uri_list):
+            url = "http://{}{}".format(dstip, uri_list[i])
+            url_l.append(url)
+    return url_l[0:total_packets]
 
 def draw_bar(url_req_list: list):
     logger.info("[draw bar] render html file...")
@@ -119,7 +136,8 @@ def send_request(url_list: list):
     global send_msg_num
     for url in url_list:
         try:
-            logger.debug("[{}] Get: {}".format(threading.current_thread().name, url))
+            logger.debug("[{}] Get: {}".format(
+                threading.current_thread().name, url))
             r = requests.get(url, headers=headers, timeout=1)
             lock.acquire()
             send_msg_num += 1
@@ -133,18 +151,19 @@ def send_request(url_list: list):
             logger.debug(e)
 
 
-def cal_proportion():
+def cal_proportion(father_addr, father_port):
     BYTES_PER_REQ = 16640  # todo: change to right value
     global send_msg_num
-    father_out_byte = get_father_output_byte("2400:dd01:1037:8090::5", 8080)
+    father_out_byte = get_father_output_byte(father_addr, father_port)
     # father_out_byte = BYTES_PER_REQ * 0.321 # test
-    logger.info("recall_prop = {:.2%}".format(father_out_byte / (send_msg_num * BYTES_PER_REQ)))
+    logger.info("recall_prop = {:.2%}".format(
+        father_out_byte / (send_msg_num * BYTES_PER_REQ)))
 
 
-def loop_thread_cal_proportion():
+def loop_thread_cal_proportion(father_addr="2400:dd01:1037:8090::5", father_port=8080):
     while True:
         time.sleep(CAL_PERIOD)
-        cal_proportion()
+        cal_proportion(father_addr, father_port)
 
 
 def get_father_output_byte(father_ip: str, father_port: int) -> int:
@@ -157,6 +176,9 @@ def get_father_output_byte(father_ip: str, father_port: int) -> int:
     log = {'fatherIP': fatherIP, 'fatherInbytes': 0,
            'fatherOutBytes': 0, 'localInBytes': 0, 'localOutBytes': 0}
     ss = os.popen(cmd).readlines()
+    if len(ss) == 0:
+        logger.error("[get_father_output_byte] get empty result")
+        return 0
     result = json.loads(ss[0])
     if 'upstreamZones' in result.keys():
         server = (result['upstreamZones'])['::nogroups']
@@ -172,8 +194,7 @@ def get_father_output_byte(father_ip: str, father_port: int) -> int:
     return int(log["fatherOutBytes"])
 
 
-if __name__ == "__main__":
-    argv = sys.argv[1:]
+def param_check(argv):
     try:
         opts, args = getopt.getopt(argv, "i:f:p:e:u:")
         if len(opts) not in (4, 5):
@@ -193,36 +214,47 @@ if __name__ == "__main__":
                 u = arg
     except getopt.GetoptError:
         print("Usage: -i <ip/domain> -f <number of flows> -p <total number of packets> -e <exponent> -u <uri_list_path>")
+        exit(1)
+    return i, f, p, e, u
+
+
+def generate_uri_list(prefix: str, suffix: str, flows_num: int, start_index: int = 0) -> list:
+    uri_list = []
+    for i in range(start_index, flows_num + 1):
+        uri_list.append(prefix + str(i) + suffix)
+    return uri_list
+
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    i, f, p, e, u = param_check(argv)
     logger = log_init()
     max_thread_num = multiprocessing.cpu_count()
     send_msg_num = 0
     succ_msg_num = 0
     start_index = 1  # todo: [set to need value]
-    uri_list = ["/gen1/{}.txt".format(i)
-                for i in range(start_index, start_index + f + 1)]  # generate uri list
+    uri_list = generate_uri_list("/gen1/", ".txt", f, start_index)  # generate uri list
     if u != "":
         uri_list = read_uri_list(u)
-    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(
-        len(uri_list), uri_list[0:10]))
-    url_list = generate_zipf_requests(i, f, p, e)
+    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
+    url_requests = generate_zipf_requests(i, f, p, e)
     deamon_thread = threading.Thread(
-        name="DeamonThread", target=loop_thread_cal_proportion)
-    deamon_thread.setDaemon(True)
+        name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
     deamon_thread.start()
     lock = threading.Lock()
     thread_list = []
-    if len(url_list) < max_thread_num:
-        send_request(url_list)
+    if len(url_requests) < max_thread_num:
+        send_request(url_requests)
     else:
         for i in range(max_thread_num):
             t = threading.Thread(target=send_request, args=(
-                url_list[i::max_thread_num],))
+                url_requests[i::max_thread_num],))
             thread_list.append(t)
             t.start()
     for t in thread_list:
         t.join()
-    draw_bar(url_list)  # draw bar chart of uri request number
-    logger.debug("URL_REQ: {}".format(set(url_list)))
+    draw_bar(url_requests)  # draw bar chart of uri request number
+    logger.debug("URL_REQ: {}".format(set(url_requests)))
     logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
-    logger.info("real flow number: {}".format(len(set(url_list))))
+    logger.info("Real flow number = {}".format(len(set(url_requests))))
     logger.info("Total number of success requests = {}".format(succ_msg_num))
