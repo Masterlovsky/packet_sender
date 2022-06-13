@@ -16,7 +16,7 @@ import threading
 import logging
 import multiprocessing
 from pyecharts import options
-from pyecharts.charts import Bar
+from pyecharts.charts import Bar, Line
 import numpy as np
 
 headers = {
@@ -27,6 +27,7 @@ headers = {
 ADDPORT = ":8080"
 SEND_REQ_INTERVAL = 0.1  # sleep () seconds between requests
 CAL_PERIOD = 1  # father recall proportion calcultion Period (s)
+LINE_UPDATE_INTER = 5  # father recall proportion calcultion Period (s)
 # RANDOM_SEED = 1
 RANDOM_SEED = None
 
@@ -111,6 +112,7 @@ def generate_union_requests(dstip, num_flows, total_packets) -> list:
             url_l.append(url)
     return url_l[0:total_packets]
 
+
 def draw_bar(url_req_list: list):
     logger.info("[draw bar] render html file...")
     url_l = list(set(url_req_list))
@@ -127,8 +129,37 @@ def draw_bar(url_req_list: list):
                              range_start=0, range_end=100, type_="inside"),
                          )
     )
-    c.render("result.html")
+    c.render("result_sender.html")
     return c
+
+
+def draw_line_chart(recal_prop_list: list):
+    l = (
+        Line(init_opts=options.InitOpts(width='1280px', height='720px'))
+        .add_xaxis(xaxis_data=["{}".format(i) for i in range(len(recal_prop_list))])
+        .add_yaxis(
+            series_name="",
+            y_axis=recal_prop_list,
+            symbol="emptyCircle",
+            is_symbol_show=True,
+            label_opts=options.LabelOpts(is_show=True),
+        )
+        .set_global_opts(
+            title_opts=options.TitleOpts(title="Recall Proportion FIGURE"),
+            tooltip_opts=options.TooltipOpts(is_show=True, trigger="axis"),
+            xaxis_opts=options.AxisOpts(
+                type_="value", name="Time*{}s".format(LINE_UPDATE_INTER*CAL_PERIOD)),
+            yaxis_opts=options.AxisOpts(
+                type_="value", name="Recall Proportion",
+                axistick_opts=options.AxisTickOpts(is_show=True),
+                splitline_opts=options.SplitLineOpts(is_show=True),
+            ),
+            datazoom_opts=options.DataZoomOpts(
+                range_start=0, range_end=100, type_="inside"),
+        )
+    )
+    l.render("result_recall_porp.html")
+    return l
 
 
 def send_request(url_list: list):
@@ -151,19 +182,24 @@ def send_request(url_list: list):
             logger.debug(e)
 
 
-def cal_proportion(father_addr, father_port):
+def cal_proportion(father_addr, father_port, rc_l: list):
     BYTES_PER_REQ = 16640  # todo: change to right value
     global send_msg_num
     father_out_byte = get_father_output_byte(father_addr, father_port)
     # father_out_byte = BYTES_PER_REQ * 0.321 # test
-    logger.info("recall_prop = {:.2%}".format(
-        father_out_byte / (send_msg_num * BYTES_PER_REQ)))
+    recall_prop = father_out_byte / (send_msg_num * BYTES_PER_REQ)
+    rc_l.append(recall_prop)
+    logger.info("recall_prop = {:.2%}".format(recall_prop))
 
 
 def loop_thread_cal_proportion(father_addr="2400:dd01:1037:8090::5", father_port=8080):
+    recal_prop_list = []
     while True:
         time.sleep(CAL_PERIOD)
-        cal_proportion(father_addr, father_port)
+        cal_proportion(father_addr, father_port, recal_prop_list)
+        if len(recal_prop_list) % LINE_UPDATE_INTER == 0:
+            draw_line_chart(recal_prop_list)
+            logger.info("[update line chart] render html file...")
 
 
 def get_father_output_byte(father_ip: str, father_port: int) -> int:
@@ -233,10 +269,12 @@ if __name__ == "__main__":
     send_msg_num = 0
     succ_msg_num = 0
     start_index = 1  # todo: [set to need value]
-    uri_list = generate_uri_list("/gen1/", ".txt", f, start_index)  # generate uri list
+    uri_list = generate_uri_list(
+        "/gen1/", ".txt", f, start_index)  # generate uri list
     if u != "":
         uri_list = read_uri_list(u)
-    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
+    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(
+        len(uri_list), uri_list[0:10]))
     url_requests = generate_zipf_requests(i, f, p, e)
     deamon_thread = threading.Thread(
         name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
