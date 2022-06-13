@@ -26,7 +26,7 @@ headers = {
 # ADDPORT = "" # defult request use :80/443
 ADDPORT = ":8080"
 SEND_REQ_INTERVAL = 0.1  # sleep () seconds between requests
-CAL_PERIOD = 1  # father recall proportion calcultion Period (s)
+CAL_PERIOD = 0.5  # father recall proportion calcultion Period (s)
 LINE_UPDATE_INTER = 5  # father recall proportion calcultion Period (s)
 # RANDOM_SEED = 1
 RANDOM_SEED = None
@@ -183,12 +183,12 @@ def send_request(url_list: list):
 
 
 def cal_proportion(father_addr, father_port, rc_l: list):
-    BYTES_PER_REQ = 16640  # todo: change to right value
+    BYTES_PER_REQ = 16626  # todo: change to right value
     global send_msg_num
     father_out_byte = get_father_output_byte(father_addr, father_port)
     # father_out_byte = BYTES_PER_REQ * 0.321 # test
     recall_prop = father_out_byte / (send_msg_num * BYTES_PER_REQ)
-    rc_l.append(recall_prop)
+    rc_l.append(round(recall_prop, 3))
     logger.info("recall_prop = {:.2%}".format(recall_prop))
 
 
@@ -261,6 +261,13 @@ def generate_uri_list(prefix: str, suffix: str, flows_num: int, start_index: int
     return uri_list
 
 
+def record_used_uri(url_requests: list, file_name: str = "used_uri.txt"):
+    with open(file_name, "w") as f:
+        for url in set(url_requests):
+            uri = "/" + "/".join(url.split("/")[3:])
+            f.write(uri + "\n")
+
+
 if __name__ == "__main__":
     argv = sys.argv[1:]
     i, f, p, e, u = param_check(argv)
@@ -269,15 +276,12 @@ if __name__ == "__main__":
     send_msg_num = 0
     succ_msg_num = 0
     start_index = 1  # todo: [set to need value]
-    uri_list = generate_uri_list(
-        "/gen1/", ".txt", f, start_index)  # generate uri list
+    uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # generate uri list
     if u != "":
         uri_list = read_uri_list(u)
-    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(
-        len(uri_list), uri_list[0:10]))
+    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
     url_requests = generate_zipf_requests(i, f, p, e)
-    deamon_thread = threading.Thread(
-        name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
+    deamon_thread = threading.Thread(name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
     deamon_thread.start()
     lock = threading.Lock()
     thread_list = []
@@ -285,13 +289,13 @@ if __name__ == "__main__":
         send_request(url_requests)
     else:
         for i in range(max_thread_num):
-            t = threading.Thread(target=send_request, args=(
-                url_requests[i::max_thread_num],))
+            t = threading.Thread(target=send_request, args=(url_requests[i::max_thread_num],))
             thread_list.append(t)
             t.start()
     for t in thread_list:
         t.join()
     draw_bar(url_requests)  # draw bar chart of uri request number
+    record_used_uri(url_requests, "used_uri.txt")  # record used uri
     logger.debug("URL_REQ: {}".format(set(url_requests)))
     logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
     logger.info("Real flow number = {}".format(len(set(url_requests))))
