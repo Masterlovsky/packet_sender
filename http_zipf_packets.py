@@ -6,7 +6,6 @@ The distribution is based on the number of flows and the total number of packets
 # zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
 
 """
-from re import S
 import time
 import socket
 import getopt

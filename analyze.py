@@ -10,7 +10,7 @@ import time
 import json
 import sys
 from pyecharts import options
-from pyecharts.charts import Line
+from pyecharts.charts import Line 
 
 BYTES_PER_REQ = 16626 # todo: change to right value
 CAL_PERIOD = 0.5  # father recall proportion calcultion Period (s)
@@ -107,7 +107,7 @@ def draw_line_chart(recal_prop_list: list):
             series_name="send_bytes",
             y_axis=[i[0] for i in recal_prop_list],
             symbol="rect",
-            color="red",
+            color="blue",
             label_opts=options.LabelOpts(is_show=True),
         )
         .add_yaxis(
@@ -121,8 +121,13 @@ def draw_line_chart(recal_prop_list: list):
             series_name="local_recall_bytes",
             y_axis=[i[2] for i in recal_prop_list],
             symbol="circle",
-            color="blue",
+            color="red",
             label_opts=options.LabelOpts(is_show=True),
+        )
+        .extend_axis(
+            yaxis=options.AxisOpts(type_="value",
+            axistick_opts=options.AxisTickOpts(is_show=True),
+            splitline_opts=options.SplitLineOpts(is_show=True),)
         )
         .set_global_opts(
             title_opts=options.TitleOpts(title="Traffic statistics Figure"),
@@ -144,11 +149,11 @@ def draw_line_chart(recal_prop_list: list):
         .add_xaxis(xaxis_data=["{}".format(i) for i in range(len(recal_prop_list))])
         .add_yaxis(
             series_name="father_recall_proportion",
-            y_axis=[round(i[1] / i[0], 3) for i in recal_prop_list],
+            y_axis=[round(i[1] / i[0], 3) for i in recal_prop_list if i[0] != 0],
             yaxis_index = 1,
             symbol="emptyCircle",
-            color="yellow",
-            linestyle_opts=options.LineStyleOpts(type_="dashed"),
+            color="pink",
+            linestyle_opts=options.LineStyleOpts(type_="dashed", width=2),
         )
     )
     l.overlap(l2)
