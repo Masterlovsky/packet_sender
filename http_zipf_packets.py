@@ -6,7 +6,9 @@ The distribution is based on the number of flows and the total number of packets
 # zipf distribution: https://en.wikipedia.org/wiki/Zipf%27s_law. We let C = 1.0
 
 """
+from re import S
 import time
+import socket
 import getopt
 import sys
 import os
@@ -30,6 +32,23 @@ CAL_PERIOD = 0.5  # father recall proportion calcultion Period (s)
 LINE_UPDATE_INTER = 5  # father recall proportion calcultion Period (s)
 # RANDOM_SEED = 1
 RANDOM_SEED = None
+LOCALHOST = "127.0.0.1"
+
+def udp_socket_listener(dstip = "127.0.0.1", dstport = 22333):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind((dstip, dstport))
+    while True:
+        msg, addr = s.recvfrom(1024)
+        logger.debug('Message from [%s:%s]: %s' %(addr[0], addr[1], bytes.hex(msg)))
+        if bytes.hex(msg) == "01":
+            # get success number
+            # lock.acquire()
+            s.sendto(send_msg_num.to_bytes(4, "big"), addr)
+            logger.debug('Message send to [%s:%s]: %s' %(addr[0], addr[1], hex(send_msg_num)))
+            # lock.release()
+        else:
+            logger.warn("Unsupported message, {}".format(bytes.hex(msg)))
 
 
 def log_init(log_level="INFO") -> logging.Logger:
@@ -117,10 +136,11 @@ def draw_bar(url_req_list: list):
     logger.info("[draw bar] render html file...")
     url_l = list(set(url_req_list))
     url_l.sort(key=lambda x: url_req_list.count(x), reverse=True)
+    url_count_l = [url_req_list.count(url) for url in url_l]
     c = (
         Bar(init_opts=options.InitOpts(width='1280px', height='720px'))
         .add_xaxis(url_l)
-        .add_yaxis("RequestNumber", [url_req_list.count(url) for url in url_l])
+        .add_yaxis("RequestNumber", url_count_l)
         .set_global_opts(title_opts=options.TitleOpts(title="Request Number-URL FIGURE"),
                          xaxis_opts=options.AxisOpts(name="URL",
                                                      axislabel_opts=options.LabelOpts(rotate=30)),
@@ -129,7 +149,7 @@ def draw_bar(url_req_list: list):
                              range_start=0, range_end=100, type_="inside"),
                          )
     )
-    c.render("result_sender.html")
+    c.render("./result_output/result_uri_info.html")
     return c
 
 
@@ -158,7 +178,7 @@ def draw_line_chart(recal_prop_list: list):
                 range_start=0, range_end=100, type_="inside"),
         )
     )
-    l.render("result_recall_porp.html")
+    l.render("./result_output/result_recall_porp.html")
     return l
 
 
@@ -172,6 +192,8 @@ def send_request(url_list: list):
             r = requests.get(url, headers=headers, timeout=1)
             lock.acquire()
             send_msg_num += 1
+            if send_msg_num % 200 == 0:
+                logger.info("Already send {} requests".format(send_msg_num))
             if r.status_code == 200:
                 succ_msg_num += 1
             else:
@@ -263,9 +285,12 @@ def generate_uri_list(prefix: str, suffix: str, flows_num: int, start_index: int
 
 def record_used_uri(url_requests: list, file_name: str = "used_uri.txt"):
     with open(file_name, "w") as f:
-        for url in set(url_requests):
+        url_l = list(set(url_requests))
+        url_l.sort(key=lambda x: url_requests.count(x), reverse=True)
+        for url in url_l:
             uri = "/" + "/".join(url.split("/")[3:])
-            f.write(uri + "\n")
+            count = url_requests.count(url)
+            f.write(uri + " " + str(count) + "\n")
 
 
 if __name__ == "__main__":
@@ -281,7 +306,8 @@ if __name__ == "__main__":
         uri_list = read_uri_list(u)
     logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
     url_requests = generate_zipf_requests(i, f, p, e)
-    deamon_thread = threading.Thread(name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
+    # deamon_thread = threading.Thread(name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
+    deamon_thread = threading.Thread(name="DeamonThread", target=udp_socket_listener, args=(LOCALHOST, 22333,), daemon=True)
     deamon_thread.start()
     lock = threading.Lock()
     thread_list = []
@@ -295,7 +321,7 @@ if __name__ == "__main__":
     for t in thread_list:
         t.join()
     draw_bar(url_requests)  # draw bar chart of uri request number
-    record_used_uri(url_requests, "used_uri.txt")  # record used uri
+    record_used_uri(url_requests, "./result_output/used_uri.txt")  # record used uri
     logger.debug("URL_REQ: {}".format(set(url_requests)))
     logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
     logger.info("Real flow number = {}".format(len(set(url_requests))))
