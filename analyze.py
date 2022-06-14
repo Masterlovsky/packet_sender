@@ -10,10 +10,11 @@ import sys
 
 BYTES_PER_REQ = 16626
 
-def get_father_output_byte(father_ip: str, father_port: int) -> int:
+
+def get_output_bytes(father_ip: str, father_port: int):
     if ":" not in father_ip:
         print("[WARN] father ip is not ipv6 address!")
-        return 0
+        return 0, 0
     fatherIP = "[" + father_ip + "]" + ":" + str(father_port)
     cmd = 'curl -g -s "http://[' + father_ip + \
         ']/stats/control?cmd=status&group=upstream@group&zone=*&group=n=nodes@group&zone=*"'
@@ -22,7 +23,7 @@ def get_father_output_byte(father_ip: str, father_port: int) -> int:
     ss = os.popen(cmd).readlines()
     if len(ss) == 0:
         print("[ERROR] [get_father_output_byte] get empty result")
-        return 0
+        return 0, 0
     result = json.loads(ss[0])
     if 'upstreamZones' in result.keys():
         server = (result['upstreamZones'])['::nogroups']
@@ -35,7 +36,7 @@ def get_father_output_byte(father_ip: str, father_port: int) -> int:
             else:
                 log['localInBytes'] += j['inBytes']
                 log['localOutBytes'] += j['outBytes']
-    return int(log["fatherOutBytes"])
+    return int(log["fatherOutBytes"]), int(log["localOutBytes"])
 
 
 def get_theoretical_rc_from_file(file_A: str, file_B: str) -> int:
@@ -58,10 +59,12 @@ def get_theoretical_rc_from_file(file_A: str, file_B: str) -> int:
     print("[INFO] [get_theoretical_rc_from_file] uri_set size:", len(uri_set))
     return len(uri_set) * BYTES_PER_REQ
 
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python3 cal_back.py uri_used_file1 uri_used_file2")
         exit(1)
-    fatherOutBytes = get_father_output_byte("2400:dd01:1037:8090::5", 8080)
+    fob, lob = get_output_bytes("2400:dd01:1037:8090::5", 8080)
     theoretical_Bytes = get_theoretical_rc_from_file(sys.argv[1], sys.argv[2])
-    print("theoretical_Bytes: " + str(theoretical_Bytes) + " / fatherOutBytes: " + str(fatherOutBytes))
+    print("theoretical_Bytes: " + str(theoretical_Bytes) + " / fatherOutBytes: " +
+          str(fob) + " / localOutBytes: " + str(lob))

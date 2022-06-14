@@ -185,9 +185,9 @@ def send_request(url_list: list):
 def cal_proportion(father_addr, father_port, rc_l: list):
     BYTES_PER_REQ = 16626  # todo: change to right value
     global send_msg_num
-    father_out_byte = get_father_output_byte(father_addr, father_port)
+    father_out_bytes, local_out_bytes = get_father_output_byte(father_addr, father_port)
     # father_out_byte = BYTES_PER_REQ * 0.321 # test
-    recall_prop = father_out_byte / (send_msg_num * BYTES_PER_REQ)
+    recall_prop = father_out_bytes / (send_msg_num * BYTES_PER_REQ)
     rc_l.append(round(recall_prop, 3))
     logger.info("recall_prop = {:.2%}".format(recall_prop))
 
@@ -202,10 +202,10 @@ def loop_thread_cal_proportion(father_addr="2400:dd01:1037:8090::5", father_port
             logger.info("[update line chart] render html file...")
 
 
-def get_father_output_byte(father_ip: str, father_port: int) -> int:
+def get_father_output_byte(father_ip: str, father_port: int):
     if ":" not in father_ip:
         logger.warn("father ip is not ipv6 address!")
-        return 0
+        return (0, 0)
     fatherIP = "[" + father_ip + "]" + ":" + str(father_port)
     cmd = 'curl -g -s "http://[' + father_ip + \
         ']/stats/control?cmd=status&group=upstream@group&zone=*&group=n=nodes@group&zone=*"'
@@ -213,8 +213,8 @@ def get_father_output_byte(father_ip: str, father_port: int) -> int:
            'fatherOutBytes': 0, 'localInBytes': 0, 'localOutBytes': 0}
     ss = os.popen(cmd).readlines()
     if len(ss) == 0:
-        logger.error("[get_father_output_byte] get empty result")
-        return 0
+        logger.error("[get_output_byte] get empty result")
+        return (0, 0)
     result = json.loads(ss[0])
     if 'upstreamZones' in result.keys():
         server = (result['upstreamZones'])['::nogroups']
@@ -227,7 +227,7 @@ def get_father_output_byte(father_ip: str, father_port: int) -> int:
             else:
                 log['localInBytes'] += j['inBytes']
                 log['localOutBytes'] += j['outBytes']
-    return int(log["fatherOutBytes"])
+    return int(log["fatherOutBytes"]), int(log["localOutBytes"])
 
 
 def param_check(argv):
