@@ -20,6 +20,7 @@ LOCALHOST = "127.0.0.1"
 
 def loop_thread_cal_proportion(addr_list:list, father_addr="2400:dd01:1037:8090::5", father_port=8080):
     recal_prop_list = []
+    recal_prop_list.append((0,0,0))
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     # set socket timeout to 1s
     s.settimeout(1.0)
@@ -33,7 +34,7 @@ def loop_thread_cal_proportion(addr_list:list, father_addr="2400:dd01:1037:8090:
                 s.sendto(bytes.fromhex("01"), addr)
                 recv_msg, _ = s.recvfrom(1024)
                 total_send_bytes += int(bytes.hex(recv_msg), 16) * BYTES_PER_REQ
-                print("[INFO] total_send_bytes:", int(bytes.hex(recv_msg), 16))
+            print("[INFO] total_send_packets:", total_send_bytes // BYTES_PER_REQ)
             break_flag = 0
         except socket.timeout:
             print("[WARN] [loop_thread_cal_proportion] socket timeout")
@@ -43,8 +44,8 @@ def loop_thread_cal_proportion(addr_list:list, father_addr="2400:dd01:1037:8090:
                 break
             continue
         if recv_msg and father_out_bytes > 0:
-            recal_prop_list.append((int(recv_msg), father_out_bytes, local_out_bytes))
-        if len(recal_prop_list) != 0 and len(recal_prop_list) % LINE_UPDATE_INTER == 0:
+            recal_prop_list.append((total_send_bytes, father_out_bytes, local_out_bytes))
+        if len(recal_prop_list) % LINE_UPDATE_INTER == 0:
             draw_line_chart(recal_prop_list)
             print("[update line chart] render html file...")
 
@@ -107,7 +108,6 @@ def draw_line_chart(recal_prop_list: list):
             y_axis=[i[0] for i in recal_prop_list],
             symbol="rect",
             color="red",
-            is_symbol_show=True,
             label_opts=options.LabelOpts(is_show=True),
         )
         .add_yaxis(
@@ -115,7 +115,6 @@ def draw_line_chart(recal_prop_list: list):
             y_axis=[i[1] for i in recal_prop_list],
             symbol="triangle",
             color="green",
-            is_symbol_show=True,
             label_opts=options.LabelOpts(is_show=True),
         )
         .add_yaxis(
@@ -123,7 +122,6 @@ def draw_line_chart(recal_prop_list: list):
             y_axis=[i[2] for i in recal_prop_list],
             symbol="circle",
             color="blue",
-            is_symbol_show=True,
             label_opts=options.LabelOpts(is_show=True),
         )
         .set_global_opts(
@@ -140,6 +138,20 @@ def draw_line_chart(recal_prop_list: list):
                 range_start=0, range_end=100, type_="inside"),
         )
     )
+
+    l2 = (
+        Line(init_opts=options.InitOpts(width='1280px', height='720px'))
+        .add_xaxis(xaxis_data=["{}".format(i) for i in range(len(recal_prop_list))])
+        .add_yaxis(
+            series_name="father_recall_proportion",
+            y_axis=[round(i[1] / i[0], 3) for i in recal_prop_list],
+            yaxis_index = 1,
+            symbol="emptyCircle",
+            color="yellow",
+            linestyle_opts=options.LineStyleOpts(type_="dashed"),
+        )
+    )
+    l.overlap(l2)
     l.render("./result_output/result_traffic.html")
     return l
 
@@ -148,7 +160,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python3 cal_back.py uri_used_file1 uri_used_file2")
         exit(1)
-    addr_list = [(LOCALHOST, 22333)] # todo: change to real ip address and port
+    addr_list = [(LOCALHOST, 22333), (LOCALHOST, 22334)] # todo: change to real ip address and port
     loop_thread_cal_proportion(addr_list)
     fob, lob = get_output_bytes("2400:dd01:1037:8090::5", 8080)
     theoretical_Bytes = get_theoretical_rc_from_file(sys.argv[1], sys.argv[2])
