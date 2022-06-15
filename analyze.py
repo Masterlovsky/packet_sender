@@ -78,25 +78,25 @@ def get_output_bytes(father_ip: str, father_port: int):
     return int(log["fatherOutBytes"]), int(log["localOutBytes"])
 
 
-def get_theoretical_rc_from_file(file_A: str, file_B: str) -> int:
+def get_theoretical_rc_from_files(*files):
     """
-    get the theoretical flow back from file_A to file_B
+    get the theoretical flow back from files
     """
-    uri_set = set()
-    with open(file_A, 'r') as f:
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            uri_set.add(line.strip().split(' ')[0])
-    with open(file_B, 'r') as f:
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            uri_set.add(line.strip().split(' ')[0])
-    print("[INFO] [get_theoretical_rc_from_file] uri_set size:", len(uri_set))
-    return len(uri_set) * BYTES_PER_REQ
+    all_set = [set() for i in range(len(files))]
+    for i in range(len(files)):
+        get_set_from_file(files[i], all_set[i])
+        print("[INFO] [get_theoretical_rc_from_file] uri_set{} size:{}".format(i, len(all_set[i])))
+
+
+    def get_set_from_file(file_name: str, uri_set: set):
+        with open(file_name, "r") as f:
+            for line in f:
+                uri_set.add(line.strip().split(' ')[0])
+
+    union_set = set.union(*all_set)
+    intersection_set = set.intersection(*all_set)
+    print("[INFO] [get_theoretical_rc_from_files] union_set size:{}, intersection_set size:{}".format(len(union_set), len(intersection_set)))
+    return len(union_set) * BYTES_PER_REQ, len(intersection_set) * BYTES_PER_REQ
 
 
 def draw_line_chart(recal_prop_list: list):
@@ -168,6 +168,6 @@ if __name__ == "__main__":
     addr_list = [(LOCALHOST, 22333), (LOCALHOST, 22334)] # todo: change to real ip address and port
     loop_thread_cal_proportion(addr_list)
     fob, lob = get_output_bytes("2400:dd01:1037:8090::5", 8080)
-    theoretical_Bytes = get_theoretical_rc_from_file(sys.argv[1], sys.argv[2])
-    print("theoretical_Bytes: " + str(theoretical_Bytes) + " / fatherOutBytes: " +
-          str(fob) + " / localOutBytes: " + str(lob))
+    total_Bytes_t, intersection_Bytes_t = get_theoretical_rc_from_files(sys.argv[1], sys.argv[2])
+    print("[theoretical] Total_Bytes: " + str(total_Bytes_t) + ", intersection_Bytes: " + str(intersection_Bytes_t))
+    print("[Actrual] fatherOutBytes: " + str(fob) + " / localOutBytes: " + str(lob))
