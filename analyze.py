@@ -82,20 +82,19 @@ def get_theoretical_rc_from_files(*files):
     """
     get the theoretical flow back from files
     """
-    all_set = [set() for i in range(len(files))]
-    for i in range(len(files)):
-        get_set_from_file(files[i], all_set[i])
-        print("[INFO] [get_theoretical_rc_from_file] uri_set{} size:{}".format(i, len(all_set[i])))
-
-
     def get_set_from_file(file_name: str, uri_set: set):
         with open(file_name, "r") as f:
             for line in f:
                 uri_set.add(line.strip().split(' ')[0])
 
+    all_set = [set() for i in range(len(files))]
+    for i in range(len(files)):
+        get_set_from_file(files[i], all_set[i])
+        print("[INFO] [get_theoretical_rc_from_file] uri_set{} size:{}".format(i, len(all_set[i])))
     union_set = set.union(*all_set)
     intersection_set = set.intersection(*all_set)
-    print("[INFO] [get_theoretical_rc_from_files] union_set size:{}, intersection_set size:{}".format(len(union_set), len(intersection_set)))
+    print("[INFO] [get_theoretical_rc_from_files] union_set size:{}, intersection_set size:{}".format(
+        len(union_set), len(intersection_set)))
     return len(union_set) * BYTES_PER_REQ, len(intersection_set) * BYTES_PER_REQ
 
 
@@ -162,8 +161,8 @@ def draw_line_chart(recal_prop_list: list):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python3 cal_back.py uri_used_file1 uri_used_file2")
+    if len(sys.argv) < 2:
+        print("Usage: python3 cal_back.py uri_used_file1 uri_used_file2 ...")
         exit(1)
     addr_list = [(LOCALHOST, 22333), (LOCALHOST, 22334)] # todo: change to real ip address and port
     loop_thread_cal_proportion(addr_list)
