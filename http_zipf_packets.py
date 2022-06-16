@@ -66,7 +66,7 @@ def log_init(log_level="INFO") -> logging.Logger:
     return logger
 
 
-def read_uri_cfg(dstip, filename, total_packets=0) -> list:
+def read_uri_cfg(dstip, filename, total_packets=0, prefix='/gen') -> list:
     url_l = []
     if ':' in dstip:
         dstip = '[' + dstip + ']' + ADDPORT
@@ -75,7 +75,7 @@ def read_uri_cfg(dstip, filename, total_packets=0) -> list:
         for line in f:
             if i % 50000 == 0:
                 logger.debug("[CFG] Already read {} lines".format(i))
-            url = "http://{}{}".format(dstip, line.strip())
+            url = "http://{}{}{}".format(dstip, prefix, line.strip())
             url_l.append(url)
             i += 1
     logger.info("[CFG] read_uri_cfg done!")
@@ -328,9 +328,9 @@ if __name__ == "__main__":
     succ_msg_num = 0
     start_index = 1  # todo: [set to need value]
     if u != "":
-        url_requests = read_uri_cfg(i, u, p)
+        url_requests = read_uri_cfg(i, u, p, "/gen2")  # todo: [set prefix]
     else:
-        uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # generate uri list
+        uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # todo: [set prefix and suffix]
         logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
         url_requests = generate_zipf_requests(i, f, p, e)
     # deamon_thread = threading.Thread(name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)

@@ -80,10 +80,12 @@ def analyze_log_file(log_file, cluster_num):
                 c_idx = cluster_idx % cluster_num
                 client_dict[client_ip] = c_idx
                 cluster_idx += 1
-            cfg_file_list[c_idx].write(uri + "\n")
+            # get file byte size ==============================================
+            file_size = items[9]
+            cfg_file_list[c_idx].write(uri + " " + file_size + "\n")
             if uri not in uri_dict:
                 # (file bytes, count)
-                uri_dict[uri] = [int(line.split()[9]), 1]
+                uri_dict[uri] = [int(file_size), 1]
             else:
                 uri_dict[uri][1] += 1
     print("[INFO] Get uri_dict from log_file: %s done!" % log_file)
