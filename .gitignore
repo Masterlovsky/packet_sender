@@ -1,4 +1,5 @@
 gen/
 result_output/
 log.txt
+*.log
 *.cfg

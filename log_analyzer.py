@@ -42,7 +42,11 @@ def get_uri_dict(log_file):
     with open(log_file, 'r') as f:
         for line in f:
             line_num += 1
+            if line_num % 10000 == 0:
+                print("[INFO] Already read %d lines..." % line_num)
             # todo: skip not-http-Get requests
+            if len(line.split()) < 6:
+                continue
             if line.split()[5] != '"GET':
                 continue
             url = line.split(" ")[6]
