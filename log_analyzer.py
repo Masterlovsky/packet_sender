@@ -1,8 +1,11 @@
 #! /usr/bin/python3
+import time
 import os
 import sys
 import json
 
+DATE_TIME_FORMAT = "%d/%b/%Y:%X"
+TIME_INTERVAL = 60 * 60 # (s)
 
 class ShowProcess(object):
     """
@@ -33,32 +36,60 @@ class ShowProcess(object):
         self.i = 1
 
 
-def get_uri_dict(log_file):
+def analyze_log_file(log_file, cluster_num):
     '''
-    get uri_dict from log_file
+    analyze log file, generate uri_dict and uri_list.cfg
     '''
     uri_dict = {}
+    client_dict = {}
     line_num = 0
+    cluster_idx = 0
+    cfg_file_list = []
+    for i in range(cluster_num):
+        f = open("uri_list{}.cfg".format(i), 'w')
+        cfg_file_list.append(f)
     with open(log_file, 'r') as f:
         for line in f:
-            line_num += 1
             if line_num % 10000 == 0:
                 print("[INFO] Already read %d lines..." % line_num)
+            if line_num >= 500000:
+                break
             # todo: skip not-http-Get requests
-            if len(line.split()) < 6:
+            items = line.split()
+            if len(items) < 6:
                 continue
-            if line.split()[5] != '"GET':
+            if items[5] != '"GET':
                 continue
-            url = line.split(" ")[6]
+            line_num += 1
+            # get time, check if it is valid =================================
+            # recv_time_str = items[4][1:]
+            # recv_t = time.strptime(recv_time_str, DATE_TIME_FORMAT)
+            # if abs(time.mktime(recv_t) - time.mktime(standard_time)) > TIME_INTERVAL / 2:
+            #     continue
+            # get uri =========================================================
+            url = items[6]
             if "?" in url:
                 url = url.split("?")[0]
             uri = "/" + "/".join(url.split('/')[3:])
+            # get client ip ===================================================
+            client_ip = items[0]
+            # put uri into right cluster cfg file 
+            if client_ip in client_dict:
+                c_idx = client_dict[client_ip]
+            else:
+                c_idx = cluster_idx % cluster_num
+                client_dict[client_ip] = c_idx
+                cluster_idx += 1
+            cfg_file_list[c_idx].write(uri + "\n")
             if uri not in uri_dict:
                 # (file bytes, count)
                 uri_dict[uri] = [int(line.split()[9]), 1]
             else:
                 uri_dict[uri][1] += 1
     print("[INFO] Get uri_dict from log_file: %s done!" % log_file)
+    for f in cfg_file_list:
+        f.close()
+    print("[INFO] Generate {} uri_config files done!".format(cluster_num))
     return uri_dict, line_num
 
 
@@ -79,20 +110,21 @@ def generate_cache_files(uri_dict, cache_root_path):
     bar.close("[INFO] Generate cache files from uri_dict done!")
 
 
-def gen_uri_list_cfg_file(uri_dict, cfg_file):
+def gen_uri_summary_file(uri_dict, cfg_file):
     '''
-    generate uri_list.cfg file from uri_dict for http_zipf_packets.py to use
+    generate uri_summary.json file from uri_dict
     '''
     with open(cfg_file, 'w') as f:
         json.dump(uri_dict, f)
-    print("[INFO] Generate uri_list.cfg file done!")
+    print("[INFO] Generate uri_summary.json file done!")
 
 
 if __name__ == "__main__":
+    standard_time = time.strptime('09/Jun/2022:22:22:09', DATE_TIME_FORMAT) # todo: change to correct time
     if len(sys.argv) != 3:
         print("[ERROR] Usage: %s log_file cache_root_path" % sys.argv[0])
         exit(1)
-    uri_dict, line_number = get_uri_dict(sys.argv[1])
+    uri_dict, line_number = analyze_log_file(sys.argv[1], 2) # 2 is cluster_num
     print("[INFO] Record number: {} / URI total number: {}".format(line_number, len(uri_dict)))
     generate_cache_files(uri_dict, sys.argv[2])
-    gen_uri_list_cfg_file(uri_dict, "uri_list.cfg")
+    gen_uri_summary_file(uri_dict, "uri_summary.json")

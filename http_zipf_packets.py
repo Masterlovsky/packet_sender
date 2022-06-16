@@ -69,6 +69,16 @@ def log_init(log_level="INFO") -> logging.Logger:
 def read_uri_cfg(dstip, filename, total_packets=0) -> list:
     url_l = []
     with open(filename, 'r') as f:
+        for line in f:
+            url = "http://{}{}".format(dstip, line.strip())
+            url_l.append(url)
+    send_max_num = len(url_l) if total_packets == 0 else total_packets
+    return url_l[0:send_max_num]
+
+
+def read_uri_json(dstip, filename, total_packets=0) -> list:
+    url_l = []
+    with open(filename, 'r') as f:
         uri_dict = json.load(f)
         for uri in uri_dict.keys():
             url = "http://{}{}".format(dstip, uri)
