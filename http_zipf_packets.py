@@ -66,10 +66,18 @@ def log_init(log_level="INFO") -> logging.Logger:
     return logger
 
 
-def read_uri_list(filename):
+def read_uri_cfg(dstip, filename, total_packets=0) -> list:
+    url_l = []
     with open(filename, 'r') as f:
-        uri_list = f.read().splitlines()
-    return uri_list
+        uri_dict = json.load(f)
+        for uri in uri_dict.keys():
+            url = "http://{}{}".format(dstip, uri)
+            for _ in range(uri_dict[uri][1]):
+                url_l.append(url)
+    np.random.seed(RANDOM_SEED)
+    np.random.shuffle(url_l)
+    send_max_num = len(url_l) if total_packets == 0 else total_packets
+    return url_l[0:send_max_num]
 
 
 def _generate_zipf_dist(num_flows, total_packets, power) -> list:
@@ -300,11 +308,12 @@ if __name__ == "__main__":
     send_msg_num = 0
     succ_msg_num = 0
     start_index = 1  # todo: [set to need value]
-    uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # generate uri list
     if u != "":
-        uri_list = read_uri_list(u)
-    logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
-    url_requests = generate_zipf_requests(i, f, p, e)
+        url_requests = read_uri_cfg(i, u, p)
+    else:
+        uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # generate uri list
+        logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
+        url_requests = generate_zipf_requests(i, f, p, e)
     # deamon_thread = threading.Thread(name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
     deamon_thread = threading.Thread(name="DeamonThread", target=udp_socket_listener, args=(LOCALHOST, 22333,), daemon=True)
     deamon_thread.start()

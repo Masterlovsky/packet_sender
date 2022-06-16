@@ -1,2 +1,4 @@
-./gen
-./result_output
+gen/
+result_output/
+log.txt
+*.cfg

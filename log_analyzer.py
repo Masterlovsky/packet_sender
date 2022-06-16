@@ -38,8 +38,13 @@ def get_uri_dict(log_file):
     get uri_dict from log_file
     '''
     uri_dict = {}
+    line_num = 0
     with open(log_file, 'r') as f:
         for line in f:
+            line_num += 1
+            # todo: skip not-http-Get requests
+            if line.split()[5] != '"GET':
+                continue
             url = line.split(" ")[6]
             if "?" in url:
                 url = url.split("?")[0]
@@ -50,7 +55,7 @@ def get_uri_dict(log_file):
             else:
                 uri_dict[uri][1] += 1
     print("[INFO] Get uri_dict from log_file: %s done!" % log_file)
-    return uri_dict
+    return uri_dict, line_num
 
 
 def generate_cache_files(uri_dict, cache_root_path):
@@ -70,7 +75,20 @@ def generate_cache_files(uri_dict, cache_root_path):
     bar.close("[INFO] Generate cache files from uri_dict done!")
 
 
+def gen_uri_list_cfg_file(uri_dict, cfg_file):
+    '''
+    generate uri_list.cfg file from uri_dict for http_zipf_packets.py to use
+    '''
+    with open(cfg_file, 'w') as f:
+        json.dump(uri_dict, f)
+    print("[INFO] Generate uri_list.cfg file done!")
+
+
 if __name__ == "__main__":
-    uri_dict = get_uri_dict("test.log")
-    print(uri_dict)
-    generate_cache_files(uri_dict, "gen")
+    if len(sys.argv) != 3:
+        print("[ERROR] Usage: %s log_file cache_root_path" % sys.argv[0])
+        exit(1)
+    uri_dict, line_number = get_uri_dict(sys.argv[1])
+    print("[INFO] Record number: {} / URI total number: {}".format(line_number, len(uri_dict)))
+    generate_cache_files(uri_dict, sys.argv[2])
+    gen_uri_list_cfg_file(uri_dict, "uri_list.cfg")
