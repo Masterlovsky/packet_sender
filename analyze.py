@@ -125,7 +125,7 @@ def get_theoretical_rc_from_files(uri_summary_dict: dict, *files, prefix="/gen")
     intersection_set = set.intersection(*all_set)
     print("[INFO] [get_theoretical_rc_from_files] union_set size:{}, intersection_set size:{}".format(
         len(union_set), len(intersection_set)))
-    if uri_summary_dict is None:
+    if len(uri_summary_dict) == 0:
         return len(union_set) * BYTES_PER_REQ, len(intersection_set) * BYTES_PER_REQ
     union_bytes = 0
     intersection_bytes = 0

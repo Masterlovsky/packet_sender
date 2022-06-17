@@ -267,6 +267,7 @@ def request_loop(dstip, num_flows, power):
     '''
     Send requests in the loop mode, choose uri use possiblity distribution list
     '''
+    print("[Main] ================ Use loop mode! =================")
     if ':' in dstip:
         dstip = '[' + dstip + ']' + ADDPORT
     zipf_p_l = _generate_zipf_p_l(num_flows, power)
@@ -276,11 +277,12 @@ def request_loop(dstip, num_flows, power):
         global succ_msg_num
         global flow_sent_set
         global flow_sent_list
+        global loop_flag
         while True:
             if loop_flag == False:
                 break
-            uri = np.random.choice(uri_list, 1, p=zipf_p_l)
-            url = "http://{}{}".format(dstip, uri[0])
+            uri = np.random.choice(uri_list, 1, p=zipf_p_l)[0]
+            url = "http://{}{}".format(dstip, uri)
             try:
                 logger.debug("[{}] Get: {}".format(
                     threading.current_thread().name, url))
@@ -289,8 +291,8 @@ def request_loop(dstip, num_flows, power):
                 send_msg_num += 1
                 flow_sent_set.add(uri)
                 flow_sent_list.append(uri)
-                if len(flow_sent_set) > num_flows:
-                    break
+                if len(flow_sent_set) >= num_flows:
+                    loop_flag = False
                 if send_msg_num % 200 == 0:
                     logger.info("Already send {} requests".format(send_msg_num))
                 if r.status_code == 200:
@@ -407,6 +409,7 @@ if __name__ == "__main__":
     uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # todo: [set prefix and suffix]
     if u != "":
         url_requests = read_uri_cfg(i, u, p, "/gen")  # todo: [set prefix]
+        LOOP_MODE = False
     else:
         logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
         url_requests = generate_zipf_requests(i, f, p, e)
@@ -423,6 +426,9 @@ if __name__ == "__main__":
         for t in thread_list:
             t.join()
         dump_uri_sent_list(flow_sent_list, "uri_list.txt")
+        draw_bar(flow_sent_list)  # draw bar chart of uri request number
+        record_used_uri(flow_sent_list, "./result_output/used_uri.txt")  # record used uri
+        logger.info("Real URI number = {}".format(len(flow_sent_set)))
         logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
         logger.info("Total send requests = {}, total success requests = {}".format(send_msg_num, succ_msg_num))
         exit(0)
@@ -439,5 +445,6 @@ if __name__ == "__main__":
     record_used_uri(url_requests, "./result_output/used_uri.txt")  # record used uri
     logger.debug("URL_REQ: {}".format(set(url_requests)))
     logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
-    logger.info("Real flow number = {}".format(len(set(url_requests))))
+    logger.info("Real URI number = {}".format(len(set(url_requests))))
+    logger.info("Total Send request number = {}".format(send_msg_num))
     logger.info("Total number of success requests = {}".format(succ_msg_num))
