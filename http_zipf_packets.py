@@ -20,6 +20,8 @@ from pyecharts import options
 from pyecharts.charts import Bar, Line
 import numpy as np
 
+BYTES_PER_REQ = 16626 # todo: change to right value
+
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
 }
@@ -32,7 +34,7 @@ LINE_UPDATE_INTER = 5  # father recall proportion calcultion Period (s)
 # RANDOM_SEED = 1
 RANDOM_SEED = None
 LOCALHOST = "127.0.0.1"
-LOOP_MODE = False # if True, the program will loop forever until receive a signal to stop
+LOOP_MODE = True # if True, the program will loop forever until receive a signal to stop
 
 def udp_socket_listener(dstip = "127.0.0.1", dstport = 22333):
     global loop_flag
@@ -79,9 +81,10 @@ def read_uri_cfg(dstip, filename, total_packets=0, prefix='/gen') -> list:
     i = 0
     with open(filename, 'r') as f:
         for line in f:
+            uri = line.strip().split(' ')[0]
             if i % 50000 == 0:
                 logger.debug("[CFG] Already read {} lines".format(i))
-            url = "http://{}{}{}".format(dstip, prefix, line.strip())
+            url = "http://{}{}{}".format(dstip, prefix, uri)
             url_l.append(url)
             i += 1
     logger.info("[CFG] read_uri_cfg done!")
@@ -103,6 +106,13 @@ def read_uri_json(dstip, filename, total_packets=0) -> list:
     np.random.shuffle(url_l)
     send_max_num = len(url_l) if total_packets == 0 else total_packets
     return url_l[0:send_max_num]
+
+
+def dump_uri_sent_list(uri_sent_list, filename):
+    with open(filename, 'w') as f:
+        for uri in uri_sent_list:
+            # todo: change to real size
+            f.write(uri + " " + str(BYTES_PER_REQ) + '\n')
 
 
 def _generate_zipf_p_l(num_flows, power) -> list:
@@ -257,8 +267,6 @@ def request_loop(dstip, num_flows, power):
     '''
     Send requests in the loop mode, choose uri use possiblity distribution list
     '''
-    global succ_msg_num
-    global send_msg_num
     if ':' in dstip:
         dstip = '[' + dstip + ']' + ADDPORT
     zipf_p_l = _generate_zipf_p_l(num_flows, power)
@@ -266,6 +274,8 @@ def request_loop(dstip, num_flows, power):
     def thread_loop():
         global send_msg_num
         global succ_msg_num
+        global flow_sent_set
+        global flow_sent_list
         while True:
             if loop_flag == False:
                 break
@@ -277,6 +287,10 @@ def request_loop(dstip, num_flows, power):
                 r = requests.get(url, headers=headers, timeout=1)
                 lock.acquire()
                 send_msg_num += 1
+                flow_sent_set.add(uri)
+                flow_sent_list.append(uri)
+                if len(flow_sent_set) > num_flows:
+                    break
                 if send_msg_num % 200 == 0:
                     logger.info("Already send {} requests".format(send_msg_num))
                 if r.status_code == 200:
@@ -392,7 +406,7 @@ if __name__ == "__main__":
     start_index = 1  # todo: [set to need value]
     uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # todo: [set prefix and suffix]
     if u != "":
-        url_requests = read_uri_cfg(i, u, p, "/gen2")  # todo: [set prefix]
+        url_requests = read_uri_cfg(i, u, p, "/gen")  # todo: [set prefix]
     else:
         logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
         url_requests = generate_zipf_requests(i, f, p, e)
@@ -403,9 +417,12 @@ if __name__ == "__main__":
     thread_list = []
     if LOOP_MODE:
         loop_flag = True
+        flow_sent_set = set() # record the uri set that has been sent
+        flow_sent_list = [] # record the uri list that has been sent
         request_loop(i, f, e)
         for t in thread_list:
             t.join()
+        dump_uri_sent_list(flow_sent_list, "uri_list.txt")
         logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
         logger.info("Total send requests = {}, total success requests = {}".format(send_msg_num, succ_msg_num))
         exit(0)
