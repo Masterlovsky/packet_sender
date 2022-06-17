@@ -108,7 +108,7 @@ def get_output_bytes(father_ip: str, father_port: int):
     return int(log["fatherOutBytes"]), int(log["localOutBytes"])
 
 
-def get_theoretical_rc_from_files(uri_summary_dict: dict, *files):
+def get_theoretical_rc_from_files(uri_summary_dict: dict, *files, prefix="/gen"):
     """
     get the theoretical flow back from files
     """
@@ -130,8 +130,10 @@ def get_theoretical_rc_from_files(uri_summary_dict: dict, *files):
     union_bytes = 0
     intersection_bytes = 0
     for uri in union_set:
+        uri = uri.replace(prefix, "", 1)
         union_bytes += uri_summary_dict[uri][0]
     for uri in intersection_set:
+        uri = uri.replace(prefix, "", 1)
         intersection_bytes += uri_summary_dict[uri][0]
     return union_bytes, intersection_bytes
 
@@ -145,21 +147,21 @@ def draw_line_chart(recal_prop_list: list):
             y_axis=[i[0] for i in recal_prop_list],
             symbol="rect",
             color="blue",
-            label_opts=options.LabelOpts(is_show=True),
+            label_opts=options.LabelOpts(is_show=False),
         )
         .add_yaxis(
             series_name="father_recall_bytes",
             y_axis=[i[1] for i in recal_prop_list],
             symbol="triangle",
             color="green",
-            label_opts=options.LabelOpts(is_show=True),
+            label_opts=options.LabelOpts(is_show=False),
         )
         .add_yaxis(
             series_name="local_recall_bytes",
             y_axis=[i[2] for i in recal_prop_list],
             symbol="circle",
             color="red",
-            label_opts=options.LabelOpts(is_show=True),
+            label_opts=options.LabelOpts(is_show=False),
         )
         .extend_axis(
             yaxis=options.AxisOpts(type_="value",
@@ -208,6 +210,6 @@ if __name__ == "__main__":
     sum_bytes_list = [cfg_get_sum_bytes(s) for s in cfg_list]
     loop_thread_cal_proportion(addr_list)
     fob, lob = get_output_bytes("2400:dd01:1037:8090::5", 8080)
-    union_Bytes_t, intersection_Bytes_t = get_theoretical_rc_from_files(uri_summary_dict, sys.argv[1], sys.argv[2])
-    print("[theoretical] Union_Bytes: " + str(union_Bytes_t) + ", intersection_Bytes: " + str(intersection_Bytes_t))
+    u_Bytes_t, i_Bytes_t = get_theoretical_rc_from_files(uri_summary_dict, sys.argv[1], sys.argv[2], prefix="/gen2") #! change to real prefix name
+    print("[theoretical] Union_Bytes: " + str(u_Bytes_t) + ", intersection_Bytes: " + str(i_Bytes_t))
     print("[Actrual] fatherOutBytes: " + str(fob) + " / localOutBytes: " + str(lob))

@@ -32,20 +32,26 @@ LINE_UPDATE_INTER = 5  # father recall proportion calcultion Period (s)
 # RANDOM_SEED = 1
 RANDOM_SEED = None
 LOCALHOST = "127.0.0.1"
+LOOP_MODE = False # if True, the program will loop forever until receive a signal to stop
 
 def udp_socket_listener(dstip = "127.0.0.1", dstport = 22333):
+    global loop_flag
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((dstip, dstport))
     while True:
         msg, addr = s.recvfrom(1024)
-        logger.debug('Message from [%s:%s]: %s' %(addr[0], addr[1], bytes.hex(msg)))
+        logger.debug('[Socket] Message from [%s:%s]: %s' %(addr[0], addr[1], bytes.hex(msg)))
         if bytes.hex(msg) == "01":
-            # get success number
             # lock.acquire()
             s.sendto(send_msg_num.to_bytes(4, "big"), addr)
-            logger.debug('Message send to [%s:%s]: %s' %(addr[0], addr[1], hex(send_msg_num)))
+            logger.debug('[Socket] Message send to [%s:%s]: %s' %(addr[0], addr[1], hex(send_msg_num)))
             # lock.release()
+        elif bytes.hex(msg) == "02":
+            # set loop_flag to False
+            s.sendto(bytes.fromhex("01"), addr)
+            logger.info("[Socket] Receive stop signal from [%s:%s]" %(addr[0], addr[1]))
+            loop_flag = False
         else:
             logger.warn("Unsupported message, {}".format(bytes.hex(msg)))
 
@@ -97,6 +103,23 @@ def read_uri_json(dstip, filename, total_packets=0) -> list:
     np.random.shuffle(url_l)
     send_max_num = len(url_l) if total_packets == 0 else total_packets
     return url_l[0:send_max_num]
+
+
+def _generate_zipf_p_l(num_flows, power) -> list:
+    '''
+    Calculate the Zipf probability distribution for each URI
+    '''
+    summation = 0
+    res = 0
+    zipf_p_l = []
+    # * fill zipf probability list
+    for i in range(1, num_flows+1):
+        summation += 1.0 / i**power
+    C = 1.0 / summation
+    for i in range(1, num_flows+1):
+        res = C / i**power
+        zipf_p_l.append(res)
+    return zipf_p_l
 
 
 def _generate_zipf_dist(num_flows, total_packets, power) -> list:
@@ -230,6 +253,46 @@ def send_request(url_list: list):
             logger.debug(e)
 
 
+def request_loop(dstip, num_flows, power):
+    '''
+    Send requests in the loop mode, choose uri use possiblity distribution list
+    '''
+    global succ_msg_num
+    global send_msg_num
+    if ':' in dstip:
+        dstip = '[' + dstip + ']' + ADDPORT
+    zipf_p_l = _generate_zipf_p_l(num_flows, power)
+
+    def thread_loop():
+        global send_msg_num
+        global succ_msg_num
+        while True:
+            if loop_flag == False:
+                break
+            uri = np.random.choice(uri_list, 1, p=zipf_p_l)
+            url = "http://{}{}".format(dstip, uri[0])
+            try:
+                logger.debug("[{}] Get: {}".format(
+                    threading.current_thread().name, url))
+                r = requests.get(url, headers=headers, timeout=1)
+                lock.acquire()
+                send_msg_num += 1
+                if send_msg_num % 200 == 0:
+                    logger.info("Already send {} requests".format(send_msg_num))
+                if r.status_code == 200:
+                    succ_msg_num += 1
+                else:
+                    logger.debug(r)
+                lock.release()
+                time.sleep(SEND_REQ_INTERVAL)
+            except requests.exceptions.RequestException as e:
+                logger.debug(e)
+
+    for i in range(max_thread_num):
+        t = threading.Thread(target=thread_loop)
+        thread_list.append(t)
+        t.start()
+
 def cal_proportion(father_addr, father_port, rc_l: list):
     BYTES_PER_REQ = 16626  # todo: change to right value
     global send_msg_num
@@ -327,10 +390,10 @@ if __name__ == "__main__":
     send_msg_num = 0
     succ_msg_num = 0
     start_index = 1  # todo: [set to need value]
+    uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # todo: [set prefix and suffix]
     if u != "":
         url_requests = read_uri_cfg(i, u, p, "/gen2")  # todo: [set prefix]
     else:
-        uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # todo: [set prefix and suffix]
         logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
         url_requests = generate_zipf_requests(i, f, p, e)
     # deamon_thread = threading.Thread(name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
@@ -338,6 +401,14 @@ if __name__ == "__main__":
     deamon_thread.start()
     lock = threading.Lock()
     thread_list = []
+    if LOOP_MODE:
+        loop_flag = True
+        request_loop(i, f, e)
+        for t in thread_list:
+            t.join()
+        logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
+        logger.info("Total send requests = {}, total success requests = {}".format(send_msg_num, succ_msg_num))
+        exit(0)
     if len(url_requests) < max_thread_num:
         send_request(url_requests)
     else:
