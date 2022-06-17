@@ -29,6 +29,7 @@ def cfg_get_sum_bytes(file_name: str):
                 sum_bytes.append(int(line.strip().split(' ')[1]))
                 continue
             sum_bytes.append(sum_bytes[-1] + int(line.strip().split(' ')[1]))
+    print("[CFG] cfg_get_sum_bytes for file:{} done!".format(file_name))
     return sum_bytes
 
 
@@ -48,6 +49,7 @@ def loop_thread_cal_proportion(addr_list:list, father_addr="2400:dd01:1037:8090:
     # set socket timeout to 1s
     s.settimeout(1.0)
     break_flag = 0
+    print("=================== Loop start ======================")
     while True:
         total_send_bytes = 0
         send_pkts = 0
@@ -83,7 +85,7 @@ def get_output_bytes(father_ip: str, father_port: int):
         print("[WARN] father ip is not ipv6 address!")
         return 0, 0
     fatherIP = "[" + father_ip + "]" + ":" + str(father_port)
-    cmd = 'curl -g -s "http://[' + father_ip + \
+    cmd = 'curl -g -s --connect-timeout 2 "http://[' + father_ip + \
         ']/stats/control?cmd=status&group=upstream@group&zone=*&group=n=nodes@group&zone=*"'
     log = {'fatherIP': fatherIP, 'fatherInbytes': 0,
            'fatherOutBytes': 0, 'localInBytes': 0, 'localOutBytes': 0}
