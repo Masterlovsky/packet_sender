@@ -74,7 +74,7 @@ def log_init(log_level="INFO") -> logging.Logger:
     return logger
 
 
-def read_uri_cfg(dstip, filename, total_packets=0, prefix='/gen') -> list:
+def read_uri_cfg(dstip, filename, start_index=0, total_packets=0, prefix='/gen') -> list:
     url_l = []
     if ':' in dstip:
         dstip = '[' + dstip + ']' + ADDPORT
@@ -82,14 +82,16 @@ def read_uri_cfg(dstip, filename, total_packets=0, prefix='/gen') -> list:
     with open(filename, 'r') as f:
         for line in f:
             uri = line.strip().split(' ')[0]
+            if uri.startswith(prefix):
+                uri = uri.replace(prefix, "", 1)
             if i % 50000 == 0:
                 logger.debug("[CFG] Already read {} lines".format(i))
             url = "http://{}{}{}".format(dstip, prefix, uri)
             url_l.append(url)
             i += 1
     logger.info("[CFG] read_uri_cfg done!")
-    send_max_num = len(url_l) if total_packets == 0 else total_packets
-    return url_l[0:send_max_num]
+    send_max_num = len(url_l) - start_index if total_packets == 0 else total_packets
+    return url_l[start_index:start_index + send_max_num]
 
 
 def read_uri_json(dstip, filename, total_packets=0) -> list:
@@ -294,7 +296,7 @@ def request_loop(dstip, num_flows, power):
                 if len(flow_sent_set) >= num_flows:
                     loop_flag = False
                 if send_msg_num % 200 == 0:
-                    logger.info("Already send {} requests".format(send_msg_num))
+                    logger.info("Already send {} requests, uri_set_len: {}".format(send_msg_num, len(flow_sent_set)))
                 if r.status_code == 200:
                     succ_msg_num += 1
                 else:
@@ -408,7 +410,7 @@ if __name__ == "__main__":
     start_index = 1  # todo: [set to need value]
     uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # todo: [set prefix and suffix]
     if u != "":
-        url_requests = read_uri_cfg(i, u, p, "/gen")  # todo: [set prefix]
+        url_requests = read_uri_cfg(i, u, 0, p, "/gen")  # todo: [set prefix]
         LOOP_MODE = False
     else:
         logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
