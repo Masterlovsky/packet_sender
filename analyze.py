@@ -188,7 +188,7 @@ def draw_line_chart(recal_prop_list: list):
         .add_xaxis(xaxis_data=["{}".format(i) for i in range(len(recal_prop_list))])
         .add_yaxis(
             series_name="father_recall_proportion",
-            y_axis=[round(i[1] / i[0], 3) for i in recal_prop_list if i[0] != 0],
+            y_axis=[round(i[2] / (i[1] + i[2]), 3) for i in recal_prop_list if i[0] != 0],
             yaxis_index = 1,
             symbol="emptyCircle",
             color="pink",

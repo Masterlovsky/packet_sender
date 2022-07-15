@@ -7,6 +7,7 @@ The distribution is based on the number of flows and the total number of packets
 
 """
 import time
+import re
 import socket
 import getopt
 import sys
@@ -20,23 +21,22 @@ from pyecharts import options
 from pyecharts.charts import Bar, Line
 import numpy as np
 
-BYTES_PER_REQ = 16626 # todo: change to right value
+BYTES_PER_REQ = 16626  # todo: change to right value
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
 }
 
-# ADDPORT = "" # defult request use :80/443
-ADDPORT = ":8080"
+ADDPORT = 8080  # defult request use 80/443
 SEND_REQ_INTERVAL = 0.1  # sleep () seconds between requests
 CAL_PERIOD = 0.5  # father recall proportion calcultion Period (s)
 LINE_UPDATE_INTER = 5  # father recall proportion calcultion Period (s)
 # RANDOM_SEED = 1
 RANDOM_SEED = None
 LOCALHOST = "127.0.0.1"
-LOOP_MODE = True # if True, the program will loop forever until receive a signal to stop
+LOOP_MODE = False  # if True, the program will loop forever until receive a signal to stop
 
-def udp_socket_listener(dstip = "127.0.0.1", dstport = 22333):
+def udp_socket_listener(dstip="127.0.0.1", dstport=22333):
     global loop_flag
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -76,8 +76,6 @@ def log_init(log_level="INFO") -> logging.Logger:
 
 def read_uri_cfg(dstip, filename, start_index=0, total_packets=0, prefix='/gen') -> list:
     url_l = []
-    if ':' in dstip:
-        dstip = '[' + dstip + ']' + ADDPORT
     i = 0
     with open(filename, 'r') as f:
         for line in f:
@@ -96,8 +94,6 @@ def read_uri_cfg(dstip, filename, start_index=0, total_packets=0, prefix='/gen')
 
 def read_uri_json(dstip, filename, total_packets=0) -> list:
     url_l = []
-    if ':' in dstip:
-        dstip = '[' + dstip + ']' + ADDPORT
     with open(filename, 'r') as f:
         uri_dict = json.load(f)
         for uri in uri_dict.keys():
@@ -160,10 +156,6 @@ def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
     # * get zipf dist
     zipf_dist = _generate_zipf_dist(num_flows, total_packets * 10, power)
 
-    # * check dstip is ipv6 address
-    if ':' in dstip:
-        dstip = '[' + dstip + ']' + ADDPORT
-
     # * get url list
     url_l = []
 
@@ -180,10 +172,6 @@ def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
 
 
 def generate_union_requests(dstip, num_flows, total_packets) -> list:
-    # * check dstip is ipv6 address
-    if ':' in dstip:
-        dstip = '[' + dstip + ']' + ADDPORT
-
     # * get url list
     url_l = []
     for i in range(num_flows):
@@ -270,9 +258,9 @@ def request_loop(dstip, num_flows, power):
     Send requests in the loop mode, choose uri use possiblity distribution list
     '''
     print("[Main] ================ Use loop mode! =================")
-    if ':' in dstip:
-        dstip = '[' + dstip + ']' + ADDPORT
+
     zipf_p_l = _generate_zipf_p_l(num_flows, power)
+
 
     def thread_loop():
         global send_msg_num
@@ -296,7 +284,8 @@ def request_loop(dstip, num_flows, power):
                 if len(flow_sent_set) >= num_flows:
                     loop_flag = False
                 if send_msg_num % 200 == 0:
-                    logger.info("Already send {} requests, uri_set_len: {}".format(send_msg_num, len(flow_sent_set)))
+                    logger.info("Already send {} requests, uri_set_len: {}".format(
+                        send_msg_num, len(flow_sent_set)))
                 if r.status_code == 200:
                     succ_msg_num += 1
                 else:
@@ -400,9 +389,24 @@ def record_used_uri(url_requests: list, file_name: str = "used_uri.txt"):
             f.write(uri + " " + str(count) + "\n")
 
 
+def get_real_ip_address(ip_str: str) -> str:
+    # if ip_str is ipv4 address, return ip_address + port
+    if "." in ip_str and ":" in ip_str:
+        # like 192.168.0.1:8080
+        return ip_str
+    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip_str):
+        return ip_str + ":" + str(ADDPORT)
+    # if ip_str is ipv6 address, return ipv6 address + port
+    if ":" in ip_str and "[" not in ip_str:
+        return "[" + ip_str + "]:" + str(ADDPORT)
+    else:
+        return ip_str
+
+
 if __name__ == "__main__":
     argv = sys.argv[1:]
     i, f, p, e, u = param_check(argv)
+    i = get_real_ip_address(i)
     logger = log_init()
     max_thread_num = multiprocessing.cpu_count()
     send_msg_num = 0
