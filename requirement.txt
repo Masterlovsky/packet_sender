@@ -1,0 +1,16 @@
+certifi==2022.6.15
+charset-normalizer==2.0.12
+idna==3.3
+importlib-metadata==4.8.3
+Jinja2==3.0.3
+MarkupSafe==2.0.1
+meson==0.55.1
+numpy==1.19.5
+prettytable==2.5.0
+pyecharts==1.9.1
+requests==2.27.1
+simplejson==3.17.6
+typing-extensions==4.1.1
+urllib3==1.26.10
+wcwidth==0.2.5
+zipp==3.6.0
