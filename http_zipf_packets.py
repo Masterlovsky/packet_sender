@@ -16,6 +16,7 @@ import json
 import requests
 import threading
 import logging
+import yaml
 import multiprocessing
 from pyecharts import options
 from pyecharts.charts import Bar, Line
@@ -27,14 +28,7 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
 }
 
-ADDPORT = 8080  # defult request use 80/443
-SEND_REQ_INTERVAL = 0.1  # sleep () seconds between requests
-CAL_PERIOD = 0.5  # father recall proportion calcultion Period (s)
-LINE_UPDATE_INTER = 5  # father recall proportion calcultion Period (s)
-# RANDOM_SEED = 1
-RANDOM_SEED = None
-LOCALHOST = "127.0.0.1"
-LOOP_MODE = False  # if True, the program will loop forever until receive a signal to stop
+
 
 def udp_socket_listener(dstip="127.0.0.1", dstport=22333):
     global loop_flag
@@ -72,6 +66,12 @@ def log_init(log_level="INFO") -> logging.Logger:
     console.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
+
+
+def read_conf_yml(filename: str = "conf.yaml") -> dict:
+    with open(filename, 'r') as f:
+        cfg = yaml.load(f, Loader=yaml.FullLoader)
+    return cfg
 
 
 def read_uri_cfg(dstip, filename, start_index=0, total_packets=0, prefix='/gen') -> list:
@@ -153,22 +153,18 @@ def _generate_zipf_dist(num_flows, total_packets, power) -> list:
 
 
 def generate_zipf_requests(dstip, num_flows, total_packets, power) -> list:
-    # * get zipf dist
-    zipf_dist = _generate_zipf_dist(num_flows, total_packets * 10, power)
+    # * get zipf probability list
+    zipf_p_l = _generate_zipf_p_l(num_flows, power)
 
     # * get url list
     url_l = []
 
-    for i in range(num_flows):
-        if i >= len(uri_list):
-            break
-        url = "http://{}{}".format(dstip, uri_list[i])
-        for j in range(zipf_dist[i]):
-            url_l.append(url)
+    for i in range(total_packets):
+        uri = np.random.choice(uri_list, 1, p=zipf_p_l)[0]
+        url = "http://{}{}".format(dstip, uri)
+        url_l.append(url)
 
-    np.random.seed(RANDOM_SEED)
-    np.random.shuffle(url_l)
-    return url_l[0:total_packets]
+    return url_l
 
 
 def generate_union_requests(dstip, num_flows, total_packets) -> list:
@@ -181,24 +177,24 @@ def generate_union_requests(dstip, num_flows, total_packets) -> list:
     return url_l[0:total_packets]
 
 
-def draw_bar(url_req_list: list):
+def draw_bar(url_req_list: list, cfg: dict):
     logger.info("[draw bar] render html file...")
     url_l = list(set(url_req_list))
     url_l.sort(key=lambda x: url_req_list.count(x), reverse=True)
     url_count_l = [url_req_list.count(url) for url in url_l]
     c = (
-        Bar(init_opts=options.InitOpts(width='1280px', height='720px'))
+        Bar(init_opts=options.InitOpts(width=cfg["WIDTH"], height=cfg["HEIGHT"]))
         .add_xaxis(url_l)
         .add_yaxis("RequestNumber", url_count_l)
         .set_global_opts(title_opts=options.TitleOpts(title="Request Number-URL FIGURE"),
                          xaxis_opts=options.AxisOpts(name="URL",
-                                                     axislabel_opts=options.LabelOpts(rotate=30)),
+                                                     axislabel_opts=options.LabelOpts(rotate=15)),
                          yaxis_opts=options.AxisOpts(name="REQ Number"),
                          datazoom_opts=options.DataZoomOpts(
                              range_start=0, range_end=100, type_="inside"),
                          )
     )
-    c.render("./result_output/result_uri_info.html")
+    c.render(cfg["SAVE_PATH"])
     return c
 
 
@@ -375,6 +371,8 @@ def param_check(argv):
 def generate_uri_list(prefix: str, suffix: str, flows_num: int, start_index: int = 0) -> list:
     uri_list = []
     for i in range(start_index, flows_num + 1):
+        if prefix[-1] != '/':
+            prefix += '/'
         uri_list.append(prefix + str(i) + suffix)
     return uri_list
 
@@ -404,6 +402,21 @@ def get_real_ip_address(ip_str: str) -> str:
 
 
 if __name__ == "__main__":
+    # * ============= read configure file ================
+    cfg = read_conf_yml() # todo: set config file path
+    ADDPORT = cfg["PORT"]  
+    SEND_REQ_INTERVAL = cfg["SEND_REQ_INTERVAL"]
+    CAL_PERIOD = cfg["CAL_PERIOD"]
+    LINE_UPDATE_INTER = cfg["LINE_UPDATE_INTER"]  
+    RANDOM_SEED = cfg["RANDOM_SEED"]
+    LOCALHOST = cfg["DAEMONTHREAD"]["HOST"]
+    LOCALPORT = cfg["DAEMONTHREAD"]["PORT"]
+    LOOP_MODE = cfg["LOOP_MODE"]  # if True, the program will loop forever until receive a signal to stop
+    start_index = cfg["START_IDX"] 
+    PREFIX = cfg["PREFIX"]
+    SUFFIX = cfg["SUFFIX"]
+    RECORD_PATH = cfg["RECORD_USED_URI_PATH"]
+    # * =========== read command line arguments and initilize variables =============
     argv = sys.argv[1:]
     i, f, p, e, u = param_check(argv)
     i = get_real_ip_address(i)
@@ -411,16 +424,16 @@ if __name__ == "__main__":
     max_thread_num = multiprocessing.cpu_count()
     send_msg_num = 0
     succ_msg_num = 0
-    start_index = 1  # todo: [set to need value]
-    uri_list = generate_uri_list("/gen/", ".txt", f, start_index)  # todo: [set prefix and suffix]
+    # * =========== main =============
+    uri_list = generate_uri_list(PREFIX, SUFFIX, f, start_index)  # todo: [set prefix and suffix]
     if u != "":
-        url_requests = read_uri_cfg(i, u, 0, p, "/gen")  # todo: [set prefix]
+        url_requests = read_uri_cfg(i, u, 0, p, PREFIX)  # todo: [set prefix]
         LOOP_MODE = False
     else:
         logger.info("uri list len: {}, first 10 uri in uri_list: {}".format(len(uri_list), uri_list[0:10]))
         url_requests = generate_zipf_requests(i, f, p, e)
-    # deamon_thread = threading.Thread(name="DeamonThread", target=loop_thread_cal_proportion, daemon=True)
-    deamon_thread = threading.Thread(name="DeamonThread", target=udp_socket_listener, args=(LOCALHOST, 22333,), daemon=True)
+    # deamon_thread = threading.Thread(name="DaemonThread", target=loop_thread_cal_proportion, daemon=True)
+    deamon_thread = threading.Thread(name="DaemonThread", target=udp_socket_listener, args=(LOCALHOST, LOCALPORT,), daemon=True)
     deamon_thread.start()
     lock = threading.Lock()
     thread_list = []
@@ -447,8 +460,8 @@ if __name__ == "__main__":
             t.start()
     for t in thread_list:
         t.join()
-    draw_bar(url_requests)  # draw bar chart of uri request number
-    record_used_uri(url_requests, "./result_output/used_uri.txt")  # record used uri
+    draw_bar(url_requests, cfg)  # draw bar chart of uri request number
+    record_used_uri(url_requests, RECORD_PATH)  # record used uri
     logger.debug("URL_REQ: {}".format(set(url_requests)))
     logger.info("Number of flows = %d Number of packets = %d Zipf exponent = %f" % (f, p, e))
     logger.info("Real URI number = {}".format(len(set(url_requests))))

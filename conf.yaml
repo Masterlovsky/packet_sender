@@ -1,0 +1,29 @@
+# This is the configure file for packet sender
+# ==================== fundamental config =======================
+# PORT defult request use 80 for http
+PORT: 8080
+# Random seed (default is empty)
+RANDOM_SEED: 
+# LOOP Mode, if true, send request until flow numbers(-f) match the set value
+LOOP_MODE: False
+# represents the format of the generated URI list, ex. 1: uri form /gen/1.txt ~ /gen/x.txt
+START_IDX: 1
+PREFIX: "/gen"
+SUFFIX: ".txt"
+# ======================== line chart ===========================
+# sleep (INTERVAL) seconds between each requests(Thread independent)
+SEND_REQ_INTERVAL: 0.1
+# father recall proportion calcultion Period (s)
+CAL_PERIOD: 0.5
+# line chart update interval for proportion update. 
+LINE_UPDATE_INTER: 5
+# ========================= bar chart ===========================
+WIDTH: "1280px"
+HEIGHT: "720px"
+SAVE_PATH: "./result_output/result_uri_info.html"
+# ================= DeamonThread for analyzer ====================
+DAEMONTHREAD:
+  HOST: "127.0.0.1"
+  PORT: 22333
+# ======================== Result output =========================
+RECORD_USED_URI_PATH: "./result_output/used_uri.txt"

@@ -5,7 +5,7 @@
 > need 'numpy' and 'requests' module, if not installed, please install them first.
 
 ```shell
-python3 http_zipf_packets.py -i <ip> -f <number of flows> -p <number of packets> -e <exponent greater than 1> -u <uri_list path>
+python3 http_zipf_packets.py -i <ip> -f <number of flows> -p <number of packets> -e <exponent float> -u <uri_list path>
 ```
 - `-i <ip/domain_name>` example: `-i 2400:dd01::1` or `-i www.baidu.com`
 
@@ -13,7 +13,7 @@ python3 http_zipf_packets.py -i <ip> -f <number of flows> -p <number of packets>
 
 - `-p <number of packets>` example: `-p 100`, which means A total of 100 http requests are generated.
 
-- `-e <exponent greater than 1>` example: `-e 2`, this is the parameter of zipf distribution (P(X) = C * X^(-e))
+- `-e <exponent float>` example: `-e 2`, this is the parameter of zipf distribution (P(X) = C * X^(-e))
 
 - `-u <uri_list path>` example: `-u ./test.cfg`, Offer the config file path of the uri_list only when you want to use self-defined uri-list.
 
