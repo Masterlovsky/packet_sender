@@ -25,7 +25,8 @@ import numpy as np
 BYTES_PER_REQ = 16626  # todo: change to right value
 
 headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36',
+    'Connection':'close'
 }
 
 
@@ -371,7 +372,7 @@ def param_check(argv):
 def generate_uri_list(prefix: str, suffix: str, flows_num: int, start_index: int = 0) -> list:
     uri_list = []
     for i in range(start_index, flows_num + 1):
-        if prefix[-1] != '/':
+        if len(prefix) == 0 or prefix[-1] != '/':
             prefix += '/'
         uri_list.append(prefix + str(i) + suffix)
     return uri_list
